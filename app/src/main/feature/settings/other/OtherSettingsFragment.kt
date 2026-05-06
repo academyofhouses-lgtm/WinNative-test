@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -45,12 +46,8 @@ class OtherSettingsFragment : Fragment() {
     private var uiState by mutableStateOf(OtherSettingsState())
 
     private val installSoundFontLauncher =
-        registerForActivityResult(
-            ActivityResultContracts.StartActivityForResult(),
-        ) { result ->
-            if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
-            val uri = result.data?.data ?: return@registerForActivityResult
-            installSoundFont(uri)
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) installSoundFont(uri)
         }
 
     override fun onViewCreated(
@@ -120,12 +117,15 @@ class OtherSettingsFragment : Fragment() {
                             uiState = uiState.copy(soundFontIndex = index)
                         },
                         onInstallSoundFont = {
-                            val intent =
-                                Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                                    addCategory(Intent.CATEGORY_OPENABLE)
-                                    type = "*/*"
-                                }
-                            installSoundFontLauncher.launch(intent)
+                            installSoundFontLauncher.launch(
+                                arrayOf(
+                                    "application/octet-stream",
+                                    "application/x-msdownload",
+                                    "application/x-msdos-program",
+                                    "application/vnd.microsoft.portable-executable",
+                                    "*/*",
+                                ),
+                            )
                         },
                         onRemoveSoundFont = { removeSelectedSoundFont() },
                         onPickWinlatorPath = { pickStoredFolder("winlator_path_uri", SettingsConfig.DEFAULT_WINLATOR_PATH) },
@@ -298,6 +298,16 @@ class OtherSettingsFragment : Fragment() {
 
     private fun installSoundFont(uri: Uri) {
         val ctx = context ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            try {
+                ctx.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            } catch (_: Exception) {
+                // ignore if permission cannot be persisted
+            }
+        }
         val dialog = PreloaderDialog(requireActivity())
         dialog.showOnUiThread(R.string.settings_audio_installing_soundfont)
         MidiManager.installSF2File(
